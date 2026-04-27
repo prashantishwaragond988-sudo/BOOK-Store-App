@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email OTP Registration</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        margin: 0;
+        background: #0b1220;
+        color: #e6edf3;
+      }
+      .container {
+        max-width: 520px;
+        margin: 48px auto;
+        padding: 24px;
+        background: #0f1b33;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 16px;
+      }
+      label {
+        display: block;
+        margin: 12px 0 6px;
+        font-size: 13px;
+        color: rgba(230, 237, 243, 0.85);
+      }
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #0b162c;
+        color: #e6edf3;
+        outline: none;
+      }
+      input:focus {
+        border-color: rgba(56, 139, 253, 0.65);
+        box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.2);
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #2f81f7;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: rgba(255, 255, 255, 0.12);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .msg {
+        margin-top: 16px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        min-height: 20px;
+        white-space: pre-line;
+      }
+      .hint {
+        margin-top: 10px;
+        font-size: 12px;
+        color: rgba(230, 237, 243, 0.7);
+      }
+      .hidden {
+        display: none;
+      }
+      .apiRow {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .apiRow input {
+        flex: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Email OTP Registration</h1>
+
+      <label for="apiBase">API Base URL</label>
+      <div class="apiRow">
+        <input id="apiBase" placeholder="Same domain (leave blank)" />
+        <button class="secondary" id="saveApi">Save</button>
+      </div>
+
+      <label for="name">Name</label>
+      <input id="name" placeholder="Your name" />
+
+      <label for="email">Email</label>
+      <input id="email" placeholder="you@example.com" />
+
+      <label for="password">Password</label>
+      <input id="password" type="password" placeholder="Min 6 characters" />
+
+      <div class="row">
+        <button id="sendOtp">Send OTP</button>
+        <button id="resendOtp" class="secondary" disabled>Resend OTP</button>
+      </div>
+
+      <div id="otpSection" class="hidden">
+        <label for="otp">OTP</label>
+        <input id="otp" placeholder="6-digit code" inputmode="numeric" />
+        <div class="row">
+          <button id="verifyOtp">Verify OTP</button>
+          <button id="register" disabled>Register</button>
+        </div>
+      </div>
+
+      <div id="msg" class="msg"></div>
+      <div class="hint">
+        Messages: "OTP sent", "Invalid OTP", "OTP expired", "Limit reached", "Registration successful"
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const apiBaseInput = $("apiBase");
+      const saveApiBtn = $("saveApi");
+      const msgBox = $("msg");
+      const otpSection = $("otpSection");
+
+      const sendOtpBtn = $("sendOtp");
+      const resendOtpBtn = $("resendOtp");
+      const verifyOtpBtn = $("verifyOtp");
+      const registerBtn = $("register");
+
+      function setMsg(text) {
+        msgBox.textContent = text || "";
+      }
+
+      function apiBase() {
+        const saved = localStorage.getItem("API_BASE") || "";
+        const current = (apiBaseInput.value || saved).trim();
+        return current.replace(/\/+$/, "");
+      }
+
+      async function post(path, body) {
+        const res = await fetch(`${apiBase()}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body || {}),
+        });
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (_) {}
+        return { ok: res.ok, status: res.status, data };
+      }
+
+      function getForm() {
+        return {
+          name: $("name").value.trim(),
+          email: $("email").value.trim(),
+          password: $("password").value,
+          otp: $("otp").value.trim(),
+        };
+      }
+
+      function setOtpUiVisible(visible) {
+        otpSection.classList.toggle("hidden", !visible);
+        resendOtpBtn.disabled = !visible;
+      }
+
+      function setRegisterEnabled(enabled) {
+        registerBtn.disabled = !enabled;
+      }
+
+      // Initialize
+      apiBaseInput.value = localStorage.getItem("API_BASE") || "";
+      setOtpUiVisible(false);
+      setRegisterEnabled(false);
+      setMsg("");
+
+      saveApiBtn.addEventListener("click", () => {
+        localStorage.setItem("API_BASE", apiBaseInput.value.trim());
+        setMsg("Saved API Base URL");
+      });
+
+      sendOtpBtn.addEventListener("click", async () => {
+        setMsg("Sending OTP...");
+        setRegisterEnabled(false);
+        const { email } = getForm();
+        const result = await post("/send-otp", { email });
+        const message = (result.data && result.data.message) || "Request failed";
+        setMsg(message);
+        if (result.ok && result.data.success) {
+          setOtpUiVisible(true);
+        }
+      });
+
+      resendOtpBtn.addEventListener("click", async () => {
+        setMsg("Resending OTP...");
+        setRegisterEnabled(false);
+        const { email } = getForm();
+        const result = await post("/resend-otp", { email });
+        const message = (result.data && result.data.message) || "Request failed";
+        setMsg(message);
+      });
+
+      verifyOtpBtn.addEventListener("click", async () => {
+        setMsg("Verifying OTP...");
+        setRegisterEnabled(false);
+        const { email, otp } = getForm();
+        const result = await post("/verify-otp", { email, otp });
+        const message = (result.data && result.data.message) || "Request failed";
+        setMsg(message);
+        if (result.ok && result.data.success) {
+          setRegisterEnabled(true);
+        }
+      });
+
+      registerBtn.addEventListener("click", async () => {
+        setMsg("Registering...");
+        const { name, email, password } = getForm();
+        const result = await post("/register", { name, email, password });
+        const message = (result.data && result.data.message) || "Request failed";
+        setMsg(message);
+        if (result.ok && result.data.success) {
+          setRegisterEnabled(false);
+        }
+      });
+    </script>
+  </body>
+</html>

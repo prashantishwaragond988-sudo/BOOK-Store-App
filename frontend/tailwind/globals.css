@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl bg-white/10 border border-white/20 shadow-2xl rounded-3xl;
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-xl bg-black/20 border border-white/10 shadow-2xl rounded-3xl;
+  }
+  
+  .gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  
+  .gradient-glow {
+    @apply bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 bg-clip-text text-transparent;
+  }
+  
+  .btn-glass {
+    @apply glass px-8 py-4 rounded-2xl font-semibold transition-all duration-300 hover:scale-105 hover:shadow-3xl border-white/30;
+  }
+  
+  .btn-gradient {
+    @apply bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02];
+  }
+}
+
+/* Old classes for compat */
+.flipkart-header {
+  @apply bg-white dark:bg-slate-900 shadow-md py-4 border-b border-slate-200 dark:border-slate-800;
+}
+
+.product-card {
+  @apply bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm hover:shadow-md transition-all p-4;
+}
+
+.btn-primary {
+  @apply bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md font-medium transition-colors;
+}
