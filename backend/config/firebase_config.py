@@ -59,17 +59,3 @@ try:
     db = firestore.client()
 except Exception as e:
     raise RuntimeError(f"🔥 Firebase initialization failed: {e}") from e
-
-def init_firebase():
-    cred_path = os.path.join(BASE_DIR, "serviceAccountKey.json")
-
-    if not os.path.exists(cred_path):
-        raise RuntimeError(f"Firebase credentials file not found at: {cred_path}")
-
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-
-    return firestore.client()
-
-db = init_firebase()

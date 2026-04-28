@@ -1,5 +1,72 @@
+import os
+import queue
+import threading
+import time
+
 from config.firebase_config import db
 from datetime import datetime
+
+
+_FIRESTORE_CIRCUIT_OPEN_UNTIL = 0.0
+
+
+def _get_firestore_timeout_seconds():
+    raw = (os.getenv("FIRESTORE_TIMEOUT_SECONDS") or "").strip()
+    if not raw:
+        return 10.0
+    try:
+        value = float(raw)
+        return value if value > 0 else 10.0
+    except (TypeError, ValueError):
+        return 10.0
+
+
+def _get_firestore_circuit_seconds():
+    raw = (os.getenv("FIRESTORE_CIRCUIT_SECONDS") or "").strip()
+    if not raw:
+        return 300.0
+    try:
+        value = float(raw)
+        return value if value > 0 else 300.0
+    except (TypeError, ValueError):
+        return 300.0
+
+
+def _open_firestore_circuit(reason: str):
+    global _FIRESTORE_CIRCUIT_OPEN_UNTIL
+    _FIRESTORE_CIRCUIT_OPEN_UNTIL = time.time() + _get_firestore_circuit_seconds()
+    print(f"ERROR: Firestore unavailable ({reason}); circuit open for {_get_firestore_circuit_seconds()}s")
+
+
+def _run_with_timeout(fn, *, timeout: float):
+    """
+    Hard timeout wrapper to prevent requests from hanging forever when Firestore is unreachable.
+    Uses a daemon thread so a blocked Firestore call can't block the Flask worker indefinitely.
+    """
+    q = queue.Queue(maxsize=1)
+
+    def _runner():
+        try:
+            q.put(("ok", fn()))
+        except Exception as e:
+            q.put(("err", e))
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join(timeout)
+
+    if t.is_alive():
+        raise TimeoutError(f"Firestore operation timed out after {timeout}s")
+
+    try:
+        status, payload = q.get_nowait()
+    except queue.Empty:
+        raise RuntimeError("Firestore operation produced no result")
+
+    if status == "err":
+        raise payload
+
+    return payload
 
 # ➕ Add document
 def add_document(collection, data):
@@ -9,9 +76,31 @@ def add_document(collection, data):
 
 
 # 📄 Get all documents
-def get_all(collection):
-    docs = db.collection(collection).stream()
-    return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+def get_all(collection, *, raise_on_error: bool = False):
+    try:
+        timeout = _get_firestore_timeout_seconds()
+
+        global _FIRESTORE_CIRCUIT_OPEN_UNTIL
+        if time.time() < _FIRESTORE_CIRCUIT_OPEN_UNTIL:
+            raise RuntimeError("Firestore temporarily unavailable")
+
+        def _op():
+            return list(db.collection(collection).stream(timeout=timeout))
+
+        docs = _run_with_timeout(_op, timeout=timeout)
+        result = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            data["id"] = doc.id
+            result.append(data)
+        return result
+    except Exception as e:
+        print(f"ERROR in get_all({collection}):", str(e))
+        if isinstance(e, TimeoutError):
+            _open_firestore_circuit("timeout")
+        if raise_on_error:
+            raise
+        return []
 
 
 # ❌ Delete document
@@ -48,22 +137,57 @@ def get_analytics():
     
 # 🔍 Query collection with filters
 def query_collection(collection, category=None, type_filter=None, order_by="created_at", order_direction="DESC", limit=None):
-    query = db.collection(collection)
-    if category:
-        query = query.where("category", "==", category)
-    if type_filter:
-        query = query.where("type", "==", type_filter)
-    if order_by:
-        direction = "DESCENDING" if order_direction == "DESC" else "ASCENDING"
-        query = query.order_by(order_by, direction=direction)
-    if limit:
-        query = query.limit(limit)
-    docs = query.stream()
-    return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+    try:
+        query = db.collection(collection)
+        if category:
+            query = query.where("category", "==", category)
+        if type_filter:
+            query = query.where("type", "==", type_filter)
+        if order_by:
+            direction = "DESCENDING" if order_direction == "DESC" else "ASCENDING"
+            query = query.order_by(order_by, direction=direction)
+        if limit:
+            query = query.limit(limit)
+        timeout = _get_firestore_timeout_seconds()
+
+        global _FIRESTORE_CIRCUIT_OPEN_UNTIL
+        if time.time() < _FIRESTORE_CIRCUIT_OPEN_UNTIL:
+            raise RuntimeError("Firestore temporarily unavailable")
+
+        def _op():
+            return list(query.stream(timeout=timeout))
+
+        docs = _run_with_timeout(_op, timeout=timeout)
+        result = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            data["id"] = doc.id
+            result.append(data)
+        return result
+    except Exception as e:
+        print(f"ERROR in query_collection({collection}):", str(e))
+        if isinstance(e, TimeoutError):
+            _open_firestore_circuit("timeout")
+        return []
 
 # 📦 Get orders of a specific user
 def get_user_orders(user_id):
-    docs = db.collection("orders").where("user_id", "==", user_id).stream()
+    timeout = _get_firestore_timeout_seconds()
+
+    global _FIRESTORE_CIRCUIT_OPEN_UNTIL
+    if time.time() < _FIRESTORE_CIRCUIT_OPEN_UNTIL:
+        return []
+
+    def _op():
+        return list(db.collection("orders").where("user_id", "==", user_id).stream(timeout=timeout))
+
+    try:
+        docs = _run_with_timeout(_op, timeout=timeout)
+    except Exception as e:
+        print("ERROR in get_user_orders:", str(e))
+        if isinstance(e, TimeoutError):
+            _open_firestore_circuit("timeout")
+        return []
     orders = []
     for doc in docs:
         payload = {**(doc.to_dict() or {}), "id": doc.id}
