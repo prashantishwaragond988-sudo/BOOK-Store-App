@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 flask
 flask-cors
 flask-mail
@@ -8,3 +9,14 @@ requests
 gunicorn
 Flask-Mail
 flask-limiter
+=======
+flask==3.0.3
+flask-cors==4.0.0
+Flask-Mail==0.9.1
+firebase-admin==6.5.0
+cloudinary==1.40.0
+python-dotenv==1.0.0
+werkzeug==3.0.3
+PyJWT==2.8.0
+
+>>>>>>> 5f2b1d33254b32b3c519d3cefa6969b0feeda851
