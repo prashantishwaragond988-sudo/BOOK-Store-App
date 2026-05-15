@@ -1,0 +1,10 @@
+flask
+flask-cors
+flask-mail
+firebase-admin
+cloudinary
+python-dotenv
+requests
+gunicorn
+Flask-Mail
+flask-limiter
