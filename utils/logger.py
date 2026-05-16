@@ -16,13 +16,21 @@ formatter = SafeFormatter(log_format)
 stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setFormatter(formatter)
 
-file_handler = logging.FileHandler("server.log", mode="a")
-file_handler.setFormatter(formatter)
-
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
-# Clear existing handlers to avoid duplicates
-root_logger.handlers = [stdout_handler, file_handler]
+
+# On platforms like Render, the file system is read-only. 
+# We only add the file handler if we are in a local dev environment.
+handlers = [stdout_handler]
+if os.getenv("FLASK_ENV") != "production" and not os.getenv("RENDER"):
+    try:
+        file_handler = logging.FileHandler("server.log", mode="a")
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
+    except Exception:
+        pass
+
+root_logger.handlers = handlers
 
 class RequestIdFilter(logging.Filter):
     def filter(self, record):
