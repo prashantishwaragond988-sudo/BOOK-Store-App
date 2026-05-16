@@ -179,31 +179,34 @@ def _validate_email(email: str) -> bool:
 @otp_auth_bp.route("/send-otp", methods=["POST"])
 @limiter.limit("5 per minute; 20 per hour")
 def send_otp():
-    data = _get_json()
-    email = (data.get("email") or "").strip()
-    if not _validate_email(email):
-        return _json(False, "Invalid email", status_code=400)
+    try:
+        data = _get_json()
+        email = (data.get("email") or "").strip()
+        if not _validate_email(email):
+            return _json(False, "Invalid email", status_code=400)
 
-    # 1. Generate OTP (internal call to service)
-    # We need a way to get the OTP before sending it to generate HTML.
-    # Let's modify OTPService to return the code or just generate it here.
-    # Actually, OTPService._generate_code is static.
-    
-    otp = OTPService._generate_code()
-    html_body = _otp_email_html(otp, logo_url=current_app.config.get("OTP_EMAIL_LOGO_URL"))
+        otp = OTPService._generate_code()
+        html_body = _otp_email_html(otp, logo_url=current_app.config.get("OTP_EMAIL_LOGO_URL"))
 
-    success, message = OTPService.send_otp(
-        identifier=email,
-        email=email,
-        channel=NotificationChannel.EMAIL,
-        html_body=html_body,
-        otp_code=otp
-    )
-    
-    if not success:
-        return _json(False, message, status_code=429 if "wait" in message else 500)
-    
-    return _json(True, message)
+        try:
+            success, message = OTPService.send_otp(
+                identifier=email,
+                email=email,
+                channel=NotificationChannel.EMAIL,
+                html_body=html_body,
+                otp_code=otp
+            )
+        except Exception as e:
+            logger.error(f"Error in OTPService.send_otp: {e}", exc_info=True)
+            return _json(False, f"OTP Service Error: {str(e)}", status_code=500)
+        
+        if not success:
+            return _json(False, message, status_code=429 if "wait" in message else 500)
+        
+        return _json(True, message)
+    except Exception as e:
+        logger.error(f"FATAL ERROR in /send-otp: {str(e)}", exc_info=True)
+        return _json(False, f"Server Error: {str(e)}", status_code=500)
 
 
 @otp_auth_bp.route("/resend-otp", methods=["POST"])

@@ -144,7 +144,8 @@ def add_to_cart(email):
 @orders_bp.route("/cart", methods=["GET"])
 @token_required
 def get_cart(email):
-    return jsonify(_get_user_cart(email))
+    user_cart = _get_user_cart(email)
+    return jsonify(user_cart)
 
 
 @orders_bp.route("/cart/update/<cart_id>", methods=["PUT"])

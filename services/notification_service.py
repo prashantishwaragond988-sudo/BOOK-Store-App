@@ -234,8 +234,19 @@ class NotificationService:
         Main entry point for sending notifications.
         Always attempts to send via BOTH channels if requested, independently.
         """
-        app = current_app._get_current_object()
-        request_id = getattr(request, "request_id", "no-id") if has_request_context() else "system"
+        # Safely get app object.
+        try:
+            app = current_app._get_current_object()
+        except RuntimeError:
+            from app import app as flask_app
+            app = flask_app
+
+        request_id = "system"
+        try:
+            if has_request_context():
+                request_id = getattr(request, "request_id", "no-id")
+        except:
+            pass
         
         # Determine Title for in-app
         titles = {
